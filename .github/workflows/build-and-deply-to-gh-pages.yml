@@ -1,0 +1,31 @@
+name: build-and-deply-to-gh-pages
+on: 
+  push:
+    branches:
+      - master
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '16.17.0'
+      - run: npm ci
+      - run: npm run ci:build
+      - uses: actions/upload-pages-artifact@v1.0.4
+        with:
+          path: './dist/ror2-run-analyzer'
+  deploy:
+    needs: build
+    permissions:
+      pages: write 
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v1
