@@ -28,17 +28,17 @@ export class TimePerStageBarsComponent implements AfterViewInit, OnDestroy {
   height: number = 200;
 
   @Input()
-  margin: number = 30;
+  margin: { top: number, right: number, bottom: number, left: number } = { top: 0, right: 0, bottom: 10, left: 30 };
 
   @ViewChild('graph', { read: ElementRef })
   graphRootRef!: ElementRef;
 
   private get innerWidth(): number {
-    return this.width - 2 * this.margin;
+    return this.width - this.margin.left - this.margin.right;
   }
 
   private get innerHeight(): number {
-    return this.height - 2 * this.margin;
+    return this.height - this.margin.top - this.margin.bottom;
   }
 
   constructor(private changeDetectorRef: ChangeDetectorRef) { }
@@ -56,7 +56,8 @@ export class TimePerStageBarsComponent implements AfterViewInit, OnDestroy {
 
   private _onLogEntry(logEntry: LogEntry): void {
     if (logEntry instanceof StageStartEntry) {
-      this._data.push({ stageName: StageDictionary.getStageDef(logEntry.stageIndex).name, stageStart: logEntry.time })
+      this._data.push({ stageName: StageDictionary.getStageDef(logEntry.stageIndex).name, stageStart: logEntry.time });
+      this._render();
     }
 
     if (logEntry instanceof StageEndEntry || logEntry instanceof RunEndEntry) {
@@ -71,7 +72,7 @@ export class TimePerStageBarsComponent implements AfterViewInit, OnDestroy {
   }
 
   private _getYValue(d: StageData): number {
-    return (d.stageEnd ?? 0) - (d.stageStart ?? 0);
+    return (d.stageEnd ?? d.stageStart ?? 0) - (d.stageStart ?? 0);
   }
 
   private _getXValue(d: StageData): string {
@@ -109,7 +110,7 @@ export class TimePerStageBarsComponent implements AfterViewInit, OnDestroy {
       .append('g')
       .classed('leftAxis', true)
       .merge(groupSelection as any)
-      .attr('transform', `translate(${this.margin}, ${this.margin})`)
+      .attr('transform', `translate(${this.margin.left}, ${this.margin.top})`)
       .call(d3.axisLeft(yScale));
   }
 
@@ -119,7 +120,7 @@ export class TimePerStageBarsComponent implements AfterViewInit, OnDestroy {
       .append('g')
       .classed('bottomAxis', true)
       .merge(groupSelection as any)
-      .attr('transform', `translate(${this.margin}, ${this.height - this.margin})`)
+      .attr('transform', `translate(${this.margin.left}, ${this.height - this.margin.bottom})`)
       .call(d3.axisBottom(xScale));
   }
 
@@ -128,7 +129,7 @@ export class TimePerStageBarsComponent implements AfterViewInit, OnDestroy {
     groupSelection.enter()
       .append('g')
       .classed('bars', true)
-      .attr('transform', `translate(${this.margin}, ${this.margin})`);
+      .attr('transform', `translate(${this.margin.left}, ${this.margin.top})`);
 
     const barsSelection = groupSelection.selectAll('rect').data(this._data);
     barsSelection.enter()
