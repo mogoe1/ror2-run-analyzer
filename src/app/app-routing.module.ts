@@ -7,14 +7,14 @@ const routes: Routes = [
     redirectTo: 'analyze',
     pathMatch: 'full'
   },
-  { 
-    path: 'analyze', 
-    loadChildren: () => import('./modules/analyze/analyze.module').then(m => m.AnalyzeModule) 
+  {
+    path: 'analyze',
+    loadChildren: () => import('./modules/analyze/analyze.module').then(m => m.AnalyzeModule)
   }
 ];
 
 @NgModule({
-  imports: [RouterModule.forRoot(routes)],
+  imports: [RouterModule.forRoot(routes, { useHash: true })],
   exports: [RouterModule]
 })
 export class AppRoutingModule { }
