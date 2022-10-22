@@ -1,1 +1,4 @@
-<p>analyze-page works!</p>
+<ngx-dropzone *ngIf="!logSource" (change)="onFileSelected($event)" [multiple]="false" [accept]="'application/json'">
+    <ngx-dropzone-label>drag & drop your .json log or click to analyze</ngx-dropzone-label>
+</ngx-dropzone>
+<app-time-per-stage-bars *ngIf="logSource" [logSource]="logSource"></app-time-per-stage-bars>
