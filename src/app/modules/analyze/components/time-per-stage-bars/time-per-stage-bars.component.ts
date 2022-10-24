@@ -1,3 +1,4 @@
+import { formatDate } from '@angular/common';
 import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, Input, OnDestroy, ViewChild } from '@angular/core';
 import * as d3 from 'd3';
 import { concatMap, delay, of, Subject, takeUntil, tap, timeout } from 'rxjs';
@@ -105,23 +106,28 @@ export class TimePerStageBarsComponent implements AfterViewInit, OnDestroy {
   }
 
   private _renderLeftAxis(graph: d3.Selection<any, any, any, any>, yScale: d3.ScaleLinear<any, any, any>): void {
+    const axis = d3.axisLeft(yScale)
+      .tickFormat((value: any, index: number) => { return formatDate(value * 1000, 'mm:ss', 'en-US') })
+
     const groupSelection = graph.selectAll('.leftAxis').data([0]);
     groupSelection.enter()
       .append('g')
       .classed('leftAxis', true)
       .merge(groupSelection as any)
       .attr('transform', `translate(${this.margin.left}, ${this.margin.top})`)
-      .call(d3.axisLeft(yScale));
+      .call(axis);
   }
 
   private _renderBottomAxis(graph: d3.Selection<any, any, any, any>, xScale: d3.ScaleBand<any>): void {
+    const axis = d3.axisBottom(xScale)
+      .tickFormat((value: any, index: number) => { return (index + 1) + '' })
     const groupSelection = graph.selectAll('.bottomAxis').data([0]);
     groupSelection.enter()
       .append('g')
       .classed('bottomAxis', true)
       .merge(groupSelection as any)
       .attr('transform', `translate(${this.margin.left}, ${this.height - this.margin.bottom})`)
-      .call(d3.axisBottom(xScale));
+      .call(axis);
   }
 
   private _renderBars(graph: d3.Selection<any, any, any, any>, xScale: d3.ScaleBand<any>, yScale: d3.ScaleLinear<any, any, any>): void {

@@ -1,5 +1,4 @@
 <svg #graph width="500" height="200"></svg>
-<ng-container *ngIf="hooveredData">
     <br>
-    {{hooveredData.stageName}} took {{((hooveredData.stageEnd ?? 0) - (hooveredData.stageStart ?? 0)) * 1000 |  date:'mm:ss:SSS'}}
-</ng-container>
+    Stage: {{hooveredData?.stageName}}<br>
+    Time:  {{((hooveredData?.stageEnd ?? 0) - (hooveredData?.stageStart ?? 0)) * 1000 |  date:'mm:ss:SSS'}}
