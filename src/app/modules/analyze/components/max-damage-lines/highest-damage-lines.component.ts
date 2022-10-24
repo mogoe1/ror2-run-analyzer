@@ -1,5 +1,5 @@
 import { formatDate } from '@angular/common';
-import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, Input, OnDestroy, ViewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, Input, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import * as d3 from 'd3';
 import { finalize, Subject, takeUntil, tap } from 'rxjs';
 import { LogEntry } from 'src/app/shared/models/log-entry/LogEntry';
@@ -9,14 +9,14 @@ import { LogSource } from 'src/app/shared/models/log-source/LogSource';
 import { ColorUtils } from 'src/app/shared/utils/ColorUtils';
 
 @Component({
-  selector: 'app-damage-lines',
-  templateUrl: './damage-lines.component.html',
-  styleUrls: ['./damage-lines.component.scss']
+  selector: 'app-highest-damage-lines',
+  templateUrl: './highest-damage-lines.component.html',
+  styleUrls: ['./highest-damage-lines.component.scss']
 })
-export class DamageLinesComponent implements AfterViewInit, OnDestroy {
+export class HighestDamageLinesComponent implements AfterViewInit, OnDestroy {
   private _destroyed$: Subject<void> = new Subject<void>();
   private _data: Map<string, [number, number][]> = new Map();
-  private _maxDamageDone: number = 0;
+  private _highestValue: number = 0;
   private _latestEntry!: LogEntry;
 
 
@@ -70,11 +70,11 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
         data.push([0, 0])
       }
 
-      data.push([logEntry.time, logEntry.totalDamageDealt]);
-      this._maxDamageDone = this._maxDamageDone < logEntry.totalDamageDealt ? logEntry.totalDamageDealt : this._maxDamageDone;
+      data.push([logEntry.time, logEntry.highestDamageDealt]);
+      this._highestValue = this._highestValue < logEntry.highestDamageDealt ? logEntry.highestDamageDealt : this._highestValue;
     }
 
-    if (logEntry instanceof StageEndEntry) {
+    if(logEntry instanceof StageEndEntry){
       this._render();
     }
   }
@@ -96,7 +96,7 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
     graph.attr('height', this.height);
 
     const yScale = d3.scaleLinear()
-      .domain([0, this._maxDamageDone])
+      .domain([0, this._highestValue])
       .range([this.innerHeight, 0]);
 
     const xScale = d3.scaleTime()
@@ -154,5 +154,4 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
         .attr("d", line as any);
     });
   }
-
 }

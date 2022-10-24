@@ -41,6 +41,7 @@ export class LogEntryFactory{
             case 'RUN_START':
                 return new RunStartEntry(json);
             case 'STAGE_END':
+            case 'STAGE_FINISHED':
                 return new StageEndEntry(json);
             case 'STAGE_START':
                 return new StageStartEntry(json);
@@ -49,6 +50,7 @@ export class LogEntryFactory{
             case 'TELEPORTER_CHARGED':
                 return new TeleporterChargedEntry(json);
             case 'TELEPORTER_END':
+            case 'TELEPORTER_FINISHED':
                 return new TeleporterEndEntry(json);
             case 'TELEPORTER_START':
                 return new TeleporterStartEntry(json);

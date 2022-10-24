@@ -1,5 +1,9 @@
 <ngx-dropzone *ngIf="!logSource" (change)="onFileSelected($event)" [multiple]="false" [accept]="'application/json'">
     <ngx-dropzone-label>drag & drop your .json log or click to analyze</ngx-dropzone-label>
 </ngx-dropzone>
-<app-time-per-stage-bars *ngIf="logSource" [logSource]="logSource"></app-time-per-stage-bars>
-<app-damage-lines *ngIf="logSource" [logSource]="logSource"></app-damage-lines>
+<div class="container" style="max-width: 100vw;">
+    <app-time-per-stage-bars *ngIf="logSource" [logSource]="logSource"></app-time-per-stage-bars>
+    <app-damage-lines *ngIf="logSource" [logSource]="logSource"></app-damage-lines>
+    <app-highest-damage-lines *ngIf="logSource" [logSource]="logSource"></app-highest-damage-lines>
+    <app-health-lines *ngIf="logSource" [logSource]="logSource"></app-health-lines>
+</div>

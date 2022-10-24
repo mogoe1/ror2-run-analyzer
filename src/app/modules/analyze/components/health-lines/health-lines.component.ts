@@ -3,20 +3,21 @@ import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, Input, OnDestr
 import * as d3 from 'd3';
 import { finalize, Subject, takeUntil, tap } from 'rxjs';
 import { LogEntry } from 'src/app/shared/models/log-entry/LogEntry';
+import { PlayerDeathEntry } from 'src/app/shared/models/log-entry/PlayerDeathEntry';
+import { PlayerSpawnEntry } from 'src/app/shared/models/log-entry/PlayerSpawnEntry';
 import { PlayerStatsUpdateEntry } from 'src/app/shared/models/log-entry/PlayerStatsUpdateEntry';
 import { StageEndEntry } from 'src/app/shared/models/log-entry/StageEndEntry';
 import { LogSource } from 'src/app/shared/models/log-source/LogSource';
 import { ColorUtils } from 'src/app/shared/utils/ColorUtils';
 
 @Component({
-  selector: 'app-damage-lines',
-  templateUrl: './damage-lines.component.html',
-  styleUrls: ['./damage-lines.component.scss']
+  selector: 'app-health-lines',
+  templateUrl: './health-lines.component.html',
+  styleUrls: ['./health-lines.component.scss']
 })
-export class DamageLinesComponent implements AfterViewInit, OnDestroy {
+export class HealthLinesComponent implements AfterViewInit, OnDestroy {
   private _destroyed$: Subject<void> = new Subject<void>();
   private _data: Map<string, [number, number][]> = new Map();
-  private _maxDamageDone: number = 0;
   private _latestEntry!: LogEntry;
 
 
@@ -30,7 +31,7 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
   height: number = 200;
 
   @Input()
-  margin: { top: number, right: number, bottom: number, left: number } = { top: 0, right: 0, bottom: 10, left: 60 };
+  margin: { top: number, right: number, bottom: number, left: number } = { top: 0, right: 0, bottom: 10, left: 30 };
 
   @ViewChild('graph', { read: ElementRef })
   graphRootRef!: ElementRef;
@@ -59,19 +60,28 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
 
   private _onLogEntry(logEntry: LogEntry): void {
     this._latestEntry = logEntry;
-    if (logEntry instanceof PlayerStatsUpdateEntry) {
+    
+    if(logEntry instanceof PlayerDeathEntry || logEntry instanceof PlayerSpawnEntry || logEntry instanceof PlayerStatsUpdateEntry){
       const playerId: string = logEntry.playerId;
       if (!this._data.has(playerId)) {
         this._data.set(playerId, []);
       }
-
       const data: [number, number][] = this._data.get(playerId)!;
       if (data.length === 0) {
         data.push([0, 0])
       }
+    }
 
-      data.push([logEntry.time, logEntry.totalDamageDealt]);
-      this._maxDamageDone = this._maxDamageDone < logEntry.totalDamageDealt ? logEntry.totalDamageDealt : this._maxDamageDone;
+    if (logEntry instanceof PlayerStatsUpdateEntry) {
+      const playerId: string = logEntry.playerId;
+      const data: [number, number][] = this._data.get(playerId)!;
+      data.push([logEntry.time, logEntry.currentHealthFraction]);
+    }
+
+    if(logEntry instanceof PlayerDeathEntry){
+      const playerId: string = logEntry.playerId;
+      const data: [number, number][] = this._data.get(playerId)!;
+      data.push([logEntry.time, 0])
     }
 
     if (logEntry instanceof StageEndEntry) {
@@ -96,7 +106,7 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
     graph.attr('height', this.height);
 
     const yScale = d3.scaleLinear()
-      .domain([0, this._maxDamageDone])
+      .domain([0, 1])
       .range([this.innerHeight, 0]);
 
     const xScale = d3.scaleTime()
@@ -154,5 +164,4 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
         .attr("d", line as any);
     });
   }
-
 }
