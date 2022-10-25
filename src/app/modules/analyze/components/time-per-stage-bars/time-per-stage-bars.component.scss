@@ -1,3 +1,11 @@
-svg {
-    overflow: visible;
+:host {
+    svg {
+        overflow: visible;
+
+        ::ng-deep {
+            .bars rect {
+                cursor: pointer;
+            }
+        }
+    }
 }

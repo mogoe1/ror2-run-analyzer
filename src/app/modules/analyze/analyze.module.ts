@@ -8,6 +8,7 @@ import { TimePerStageBarsComponent } from './components/time-per-stage-bars/time
 import { DamageLinesComponent } from './components/damage-lines/damage-lines.component';
 import { HighestDamageLinesComponent } from './components/max-damage-lines/highest-damage-lines.component';
 import { HealthLinesComponent } from './components/health-lines/health-lines.component';
+import { ContextComponent } from './components/context/context.component';
 
 
 @NgModule({
@@ -16,7 +17,8 @@ import { HealthLinesComponent } from './components/health-lines/health-lines.com
     TimePerStageBarsComponent,
     DamageLinesComponent,
     HighestDamageLinesComponent,
-    HealthLinesComponent
+    HealthLinesComponent,
+    ContextComponent
   ],
   imports: [
     CommonModule,

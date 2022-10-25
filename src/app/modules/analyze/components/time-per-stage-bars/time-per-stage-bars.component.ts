@@ -8,6 +8,7 @@ import { RunEndEntry } from 'src/app/shared/models/log-entry/RunEndEntry';
 import { StageEndEntry } from 'src/app/shared/models/log-entry/StageEndEntry';
 import { StageStartEntry } from 'src/app/shared/models/log-entry/StageStartEntry';
 import { LogSource } from 'src/app/shared/models/log-source/LogSource';
+import { ZoomService } from '../../services/zoom.service';
 
 @Component({
   selector: 'app-time-per-stage-bars',
@@ -42,7 +43,7 @@ export class TimePerStageBarsComponent implements AfterViewInit, OnDestroy {
     return this.height - this.margin.top - this.margin.bottom;
   }
 
-  constructor(private changeDetectorRef: ChangeDetectorRef) { }
+  constructor(private _changeDetectorRef: ChangeDetectorRef, private _zoomService: ZoomService) { }
 
   ngAfterViewInit(): void {
     this.logSource.logStream$.pipe(
@@ -142,10 +143,14 @@ export class TimePerStageBarsComponent implements AfterViewInit, OnDestroy {
       .append('rect')
       .on('mouseenter', (event: MouseEvent, data: StageData) => {
         this.hooveredData = data;
-        this.changeDetectorRef.detectChanges();
-      }).on('mouseleave', (event: MouseEvent, data: StageData) => {
+        this._changeDetectorRef.detectChanges();
+      })
+      .on('mouseleave', (event: MouseEvent, data: StageData) => {
         this.hooveredData = undefined;
-        this.changeDetectorRef.detectChanges();
+        this._changeDetectorRef.detectChanges();
+      })
+      .on('click', (e: PointerEvent, data: StageData) => {
+        this._zoomService.setZoom([data.stageStart || 0, data.stageEnd || 0]);
       })
       .attr('y', () => yScale(0))
       .attr('height', () => this.innerHeight - yScale(0))

@@ -1,12 +1,13 @@
 import { formatDate } from '@angular/common';
-import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, Input, OnDestroy, ViewChild } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, Input, OnDestroy, ViewChild } from '@angular/core';
 import * as d3 from 'd3';
-import { finalize, Subject, takeUntil, tap } from 'rxjs';
+import { debounceTime, finalize, skip, Subject, takeUntil, tap, throttleTime } from 'rxjs';
 import { LogEntry } from 'src/app/shared/models/log-entry/LogEntry';
 import { PlayerStatsUpdateEntry } from 'src/app/shared/models/log-entry/PlayerStatsUpdateEntry';
 import { StageEndEntry } from 'src/app/shared/models/log-entry/StageEndEntry';
 import { LogSource } from 'src/app/shared/models/log-source/LogSource';
 import { ColorUtils } from 'src/app/shared/utils/ColorUtils';
+import { ZoomService } from '../../services/zoom.service';
 
 @Component({
   selector: 'app-damage-lines',
@@ -19,6 +20,10 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
   private _maxDamageDone: number = 0;
   private _latestEntry!: LogEntry;
 
+  private _currentZoom: [number, number] | null = null;
+  private _currentMin: number = 0;
+  private _currentMax: number = 0;
+  private _currentZoomedData: Map<string, [number, number][]> = new Map();
 
   @Input()
   logSource!: LogSource;
@@ -34,6 +39,7 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
 
   @ViewChild('graph', { read: ElementRef })
   graphRootRef!: ElementRef;
+  xScale!: d3.ScaleTime<number, number, never>;
 
   private get innerWidth(): number {
     return this.width - this.margin.left - this.margin.right;
@@ -43,13 +49,23 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
     return this.height - this.margin.top - this.margin.bottom;
   }
 
-  constructor(private changeDetectorRef: ChangeDetectorRef) { }
+  private get _isZoomed(): boolean {
+    return !!this._currentZoom;
+  }
+
+  constructor(private _zoomService: ZoomService) { }
 
   ngAfterViewInit(): void {
     this.logSource.logStream$.pipe(
       takeUntil(this._destroyed$),
       tap((entry: LogEntry) => this._onLogEntry(entry)),
       finalize(() => this._onLogFinished())
+    ).subscribe();
+
+    this._zoomService.zoom$.pipe(
+      takeUntil(this._destroyed$),
+      throttleTime(1000 / 60),
+      tap((zoom: [number, number] | null) => this._onZoomedTo(zoom)),
     ).subscribe();
   }
 
@@ -79,6 +95,42 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
     }
   }
 
+  private _onZoomedTo(zoom: [number, number] | null) {
+    this._currentZoom = zoom;
+    if (this._isZoomed) {
+      this._currentZoomedData = new Map<string, [number, number][]>();
+
+      this._currentMin = Infinity;
+      this._currentMax = -Infinity;
+
+      this._data.forEach((data: [number, number][], playerId: string) => {
+        const zoomedData = data.filter((value: [number, number], index: number) => {
+          const isInsideZoom: boolean = value[0] >= this._currentZoom![0] && value[0] <= this._currentZoom![1];
+          let isLastElementBeforeZoom: boolean = false;
+          let isFirstElementAfterZoom: boolean = false;
+          if (!isInsideZoom && index > 0) {
+            const x: number = data.at(index - 1)![0]
+            isFirstElementAfterZoom = x <= this._currentZoom![1] && x >= this._currentZoom![0];
+          }
+          if (!isInsideZoom && index < (data.length - 1)) {
+            const x: number = data.at(index + 1)![0]
+            isLastElementBeforeZoom = x >= this._currentZoom![0] && x <= this._currentZoom![1];
+          }
+          return isInsideZoom || isLastElementBeforeZoom || isFirstElementAfterZoom;
+        });
+        this._currentZoomedData.set(playerId, zoomedData);
+        if (zoomedData.length > 0) {
+          this._currentMin = Math.min(this._currentMin, zoomedData.at(0)![1])
+          this._currentMax = Math.max(this._currentMax, zoomedData.at(-1)![1])
+        }
+      })
+      this._currentMin = this._currentMin === Infinity ? 0 : this._currentMin;
+      this._currentMax = Math.max(this._currentMax, 0);
+    }
+
+    this._render();
+  }
+
   private _onLogFinished(): void {
     this._data.forEach((data: [number, number][], playerId: string) => {
       const latestDatapoint: [number, number] = data.at(-1)!;
@@ -91,21 +143,30 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
   }
 
   private _render() {
+    if (!this._latestEntry) {
+      return;
+    }
+
+    const start: number = this._isZoomed ? this._currentZoom![0] : 0;
+    const end: number = this._isZoomed ? this._currentZoom![1] : this._latestEntry.time;
+    const min: number = this._isZoomed ? this._currentMin : 0;
+    const max: number = this._isZoomed ? this._currentMax : this._maxDamageDone;
+
     const graph = d3.select(this.graphRootRef.nativeElement);
     graph.attr('width', this.width);
     graph.attr('height', this.height);
 
     const yScale = d3.scaleLinear()
-      .domain([0, this._maxDamageDone])
+      .domain([min, max])
       .range([this.innerHeight, 0]);
 
-    const xScale = d3.scaleTime()
-      .domain([0, this._latestEntry.time])
-      .range([0, this.innerWidth])
+    this.xScale = d3.scaleTime()
+      .domain([start, end])
+      .range([0, this.innerWidth]);
 
     this._renderLeftAxis(graph, yScale);
-    this._renderBottomAxis(graph, xScale);
-    this._renderLines(graph, xScale, yScale);
+    this._renderBottomAxis(graph, this.xScale);
+    this._renderLines(graph, this.xScale, yScale);
   }
 
   private _renderLeftAxis(graph: d3.Selection<any, any, any, any>, yScale: d3.ScaleLinear<any, any, any>): void {
@@ -120,7 +181,7 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
 
   private _renderBottomAxis(graph: d3.Selection<any, any, any, any>, xScale: d3.ScaleTime<any, any>): void {
     const axis = d3.axisBottom(xScale)
-      .tickFormat((value: any, index: number) => { return formatDate(value * 1000, 'mm:ss', 'en-US') })
+      .tickFormat((value: any, index: number) => { return formatDate(value * 1000, 'H:mm:ss', 'en-US', 'UTC+0') })
 
     const groupSelection = graph.selectAll('.bottomAxis').data([0]);
     groupSelection.enter()
@@ -132,8 +193,8 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
   }
 
   private _renderLines(graph: d3.Selection<any, any, any, any>, xScale: d3.ScaleTime<any, any>, yScale: d3.ScaleLinear<any, any, any>): void {
-
-    this._data.forEach((data: [number, number][], playerId: string) => {
+    const dataset = this._isZoomed ? this._currentZoomedData : this._data;
+    dataset.forEach((_data: [number, number][], playerId: string) => {
       const groupSelection = graph.selectAll(`.line-group-${playerId}`).data([0]);
       groupSelection.enter()
         .append('g')
@@ -144,7 +205,7 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
         .x((d: [number, number]) => xScale(d[0]))
         .y((d: [number, number]) => yScale(d[1]));
 
-      const pathSelection = groupSelection.selectAll('path').data([data]);
+      const pathSelection = groupSelection.selectAll('path').data([_data]);
       pathSelection.enter()
         .append("path")
         .style("fill", "none")
@@ -154,5 +215,4 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
         .attr("d", line as any);
     });
   }
-
 }
