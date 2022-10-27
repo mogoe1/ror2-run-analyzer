@@ -1,7 +1,7 @@
 import { formatDate } from '@angular/common';
 import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, Input, OnDestroy, ViewChild } from '@angular/core';
 import * as d3 from 'd3';
-import { concatMap, delay, of, Subject, takeUntil, tap, timeout } from 'rxjs';
+import { concatMap, delay, finalize, of, Subject, takeUntil, tap, timeout } from 'rxjs';
 import { StageDictionary } from 'src/app/shared/models/dictionary/StageDictionary';
 import { LogEntry } from 'src/app/shared/models/log-entry/LogEntry';
 import { RunEndEntry } from 'src/app/shared/models/log-entry/RunEndEntry';
@@ -18,6 +18,7 @@ import { ZoomService } from '../../services/zoom.service';
 export class TimePerStageBarsComponent implements AfterViewInit, OnDestroy {
   private _destroyed$: Subject<void> = new Subject<void>();
   private _data: StageData[] = [];
+  private _latestReceivedTime = 0;
   public hooveredData?: StageData;
 
   @Input()
@@ -49,6 +50,7 @@ export class TimePerStageBarsComponent implements AfterViewInit, OnDestroy {
     this.logSource.logStream$.pipe(
       takeUntil(this._destroyed$),
       tap((entry: LogEntry) => this._onLogEntry(entry)),
+      finalize(() => this._onLogFinished()),
     ).subscribe();
   }
 
@@ -57,6 +59,7 @@ export class TimePerStageBarsComponent implements AfterViewInit, OnDestroy {
   }
 
   private _onLogEntry(logEntry: LogEntry): void {
+    this._latestReceivedTime = Math.max(this._latestReceivedTime, logEntry.time);
     if (logEntry instanceof StageStartEntry) {
       this._data.push({ stageName: StageDictionary.getStageDef(logEntry.stageIndex).name, stageStart: logEntry.time });
       this._render();
@@ -69,6 +72,14 @@ export class TimePerStageBarsComponent implements AfterViewInit, OnDestroy {
       }
 
       lastEntry.stageEnd = logEntry.time;
+      this._render();
+    }
+  }
+
+  private _onLogFinished(): void {
+    const lastEntry: StageData | undefined = this._data.at(-1)
+    if (lastEntry != undefined && !lastEntry.stageEnd) {
+      lastEntry.stageEnd = this._latestReceivedTime;
       this._render();
     }
   }
