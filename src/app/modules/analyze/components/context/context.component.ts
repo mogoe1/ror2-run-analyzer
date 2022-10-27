@@ -68,8 +68,8 @@ export class ContextComponent implements AfterViewInit, OnDestroy {
       const start: number = this._currentXScale(zoom[0] * this.FACTOR) + this.margin.left;
       const end: number = this._currentXScale(zoom[1] * this.FACTOR) + this.margin.left;
       this._currentBrush.move(d3.select(this.graphRootRef.nativeElement), [start, end]);
-    }else{
-      if(this._currentBrush){
+    } else {
+      if (this._currentBrush) {
         this._currentBrush.clear(d3.select(this.graphRootRef.nativeElement));
       }
     }
@@ -135,7 +135,12 @@ export class ContextComponent implements AfterViewInit, OnDestroy {
     this._currentBrush = d3.brushX()
       .extent([[this.margin.left, this.margin.top], [this._width - this.margin.right, this._height - this.margin.bottom]])
       .on('start', () => { this._brushInProgress = true })
-      .on('end', () => this._brushInProgress = false)
+      .on('end.cleared',(event: d3.D3BrushEvent<any>, b: any)=>{
+        if(!event.selection){
+          this._zoomService.setZoom(null);
+        }
+      })
+      .on('end', () =>this._brushInProgress = false)
       .on('brush', (event: d3.D3BrushEvent<any>, b: any) => {
         if (event.selection) {
           const start: number = xScale.invert(event?.selection?.[0] as unknown as number - 10).getTime() / this.FACTOR;
