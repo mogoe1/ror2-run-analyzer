@@ -1,1 +1,7 @@
 <svg #graph width="500" height="200"></svg>
+<div *ngIf="selectorValues">
+    Damage at: {{selectorValues.time * 1000 | date:'H:mm:ss':'UTC+0':'en-US'}}
+    <div *ngFor="let value of selectorValues.damgages">
+        <span [style.color]="value.color">{{value.name}}: {{value.damage}}</span>
+    </div>
+</div>

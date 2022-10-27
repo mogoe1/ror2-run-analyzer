@@ -1,7 +1,8 @@
 import { formatDate } from '@angular/common';
-import { AfterViewInit, Component, ElementRef, Input, OnDestroy, ViewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, Input, OnDestroy, ViewChild } from '@angular/core';
 import * as d3 from 'd3';
-import { debounceTime, finalize, skip, Subject, takeUntil, tap, throttleTime } from 'rxjs';
+import { color } from 'd3';
+import { concatMap, debounceTime, finalize, skip, Subject, takeUntil, tap, throttleTime } from 'rxjs';
 import { LogEntry } from 'src/app/shared/models/log-entry/LogEntry';
 import { PlayerStatsUpdateEntry } from 'src/app/shared/models/log-entry/PlayerStatsUpdateEntry';
 import { StageEndEntry } from 'src/app/shared/models/log-entry/StageEndEntry';
@@ -16,14 +17,21 @@ import { ZoomService } from '../../services/zoom.service';
 })
 export class DamageLinesComponent implements AfterViewInit, OnDestroy {
   private _destroyed$: Subject<void> = new Subject<void>();
-  private _data: Map<string, [number, number][]> = new Map();
-  private _maxDamageDone: number = 0;
-  private _latestEntry!: LogEntry;
 
-  private _currentZoom: [number, number] | null = null;
-  private _currentMin: number = 0;
-  private _currentMax: number = 0;
-  private _currentZoomedData: Map<string, [number, number][]> = new Map();
+  private _latestEntry!: LogEntry;
+  private _data: Map<string, [number, number][]> = new Map();
+  private _maxDamage: number = 0;
+
+  private _currentFocusBoundaries: [number, number] | null = null;
+  private _currentFocusMinDamage: number = 0;
+  private _currentFocusMaxDamage: number = 0;
+  private _currentDataInFocus: Map<string, [number, number][]> = new Map();
+  xScale!: d3.ScaleTime<number, number, never>;
+
+  private _selectorPosition$: Subject<number | null> = new Subject();
+  private _damagesAtSelector: { time: number, damgages: { name: string, color: string, damage: number }[] } | null = null;
+
+  private _playerNamesById: Map<string, string> = new Map();
 
   @Input()
   logSource!: LogSource;
@@ -39,7 +47,7 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
 
   @ViewChild('graph', { read: ElementRef })
   graphRootRef!: ElementRef;
-  xScale!: d3.ScaleTime<number, number, never>;
+
 
   private get innerWidth(): number {
     return this.width - this.margin.left - this.margin.right;
@@ -49,11 +57,15 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
     return this.height - this.margin.top - this.margin.bottom;
   }
 
-  private get _isZoomed(): boolean {
-    return !!this._currentZoom;
+  private get _isFocused(): boolean {
+    return !!this._currentFocusBoundaries;
   }
 
-  constructor(private _zoomService: ZoomService) { }
+  public get selectorValues(): { time: number, damgages: { name: string, color: string, damage: number }[] } | null {
+    return this._damagesAtSelector;
+  }
+
+  constructor(private _cd: ChangeDetectorRef, private _zoomService: ZoomService) { }
 
   ngAfterViewInit(): void {
     this.logSource.logStream$.pipe(
@@ -65,7 +77,13 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
     this._zoomService.zoom$.pipe(
       takeUntil(this._destroyed$),
       throttleTime(1000 / 60),
-      tap((zoom: [number, number] | null) => this._onZoomedTo(zoom)),
+      tap((focus: [number, number] | null) => this._onFocus(focus)),
+    ).subscribe();
+
+    this._selectorPosition$.pipe(
+      takeUntil(this._destroyed$),
+      throttleTime(1000 / 60),
+      tap((xPosOnGraph: number | null) => this._onSelectorChanged(xPosOnGraph)),
     ).subscribe();
   }
 
@@ -76,6 +94,9 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
   private _onLogEntry(logEntry: LogEntry): void {
     this._latestEntry = logEntry;
     if (logEntry instanceof PlayerStatsUpdateEntry) {
+      if (!this._playerNamesById.has(logEntry.playerId)) {
+        this._playerNamesById.set(logEntry.playerId, logEntry.playerName);
+      }
       const playerId: string = logEntry.playerId;
       if (!this._data.has(playerId)) {
         this._data.set(playerId, []);
@@ -87,7 +108,7 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
       }
 
       data.push([logEntry.time, logEntry.totalDamageDealt]);
-      this._maxDamageDone = this._maxDamageDone < logEntry.totalDamageDealt ? logEntry.totalDamageDealt : this._maxDamageDone;
+      this._maxDamage = this._maxDamage < logEntry.totalDamageDealt ? logEntry.totalDamageDealt : this._maxDamage;
     }
 
     if (logEntry instanceof StageEndEntry) {
@@ -95,40 +116,46 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  private _onZoomedTo(zoom: [number, number] | null) {
-    this._currentZoom = zoom;
-    if (this._isZoomed) {
-      this._currentZoomedData = new Map<string, [number, number][]>();
-
-      this._currentMin = Infinity;
-      this._currentMax = -Infinity;
+  private _onFocus(boundaries: [number, number] | null) {
+    this._currentFocusBoundaries = boundaries;
+    if (this._isFocused) {
+      this._currentDataInFocus = new Map<string, [number, number][]>();
 
       this._data.forEach((data: [number, number][], playerId: string) => {
-        const zoomedData = data.filter((value: [number, number], index: number) => {
-          const isInsideZoom: boolean = value[0] >= this._currentZoom![0] && value[0] <= this._currentZoom![1];
-          let isLastElementBeforeZoom: boolean = false;
-          let isFirstElementAfterZoom: boolean = false;
-          if (!isInsideZoom && index > 0) {
-            const x: number = data.at(index - 1)![0]
-            isFirstElementAfterZoom = x <= this._currentZoom![1] && x >= this._currentZoom![0];
-          }
-          if (!isInsideZoom && index < (data.length - 1)) {
-            const x: number = data.at(index + 1)![0]
-            isLastElementBeforeZoom = x >= this._currentZoom![0] && x <= this._currentZoom![1];
-          }
-          return isInsideZoom || isLastElementBeforeZoom || isFirstElementAfterZoom;
-        });
-        this._currentZoomedData.set(playerId, zoomedData);
-        if (zoomedData.length > 0) {
-          this._currentMin = Math.min(this._currentMin, zoomedData.at(0)![1])
-          this._currentMax = Math.max(this._currentMax, zoomedData.at(-1)![1])
+        let startIndex = d3.bisector((dataPoint: [number, number]) => dataPoint[0]).right(data, this._currentFocusBoundaries![0]);
+        let endIndex = d3.bisector((dataPoint: [number, number]) => dataPoint[0]).left(data, this._currentFocusBoundaries![1]);
+        if (startIndex > 0) {
+          startIndex--;
         }
-      })
-      this._currentMin = this._currentMin === Infinity ? 0 : this._currentMin;
-      this._currentMax = Math.max(this._currentMax, 0);
+        if (endIndex < data.length - 1) {
+          endIndex++;
+        }
+        const zoomedData = data.slice(startIndex, endIndex + 1);
+        this._currentDataInFocus.set(playerId, zoomedData);
+      });
+      const extend: [number, number] | [undefined, undefined] = d3.extent(Array.from(this._currentDataInFocus.values()).flat(), (d: [number, number]) => d[1]);
+      this._currentFocusMinDamage = extend[0] || 0;
+      this._currentFocusMaxDamage = extend[1] || 0;
     }
 
     this._render();
+  }
+
+  private _onSelectorChanged(xPosOnGraph: number | null) {
+    if (xPosOnGraph === null) {
+      return;
+    }
+
+    const time: number = this.xScale.invert(xPosOnGraph - this.margin.left).getTime();
+    this._damagesAtSelector = { time, damgages: [] };
+    const dataToWorkOn = this._isFocused ? this._currentDataInFocus : this._data;
+    dataToWorkOn.forEach((data: [number, number][], playerId: string) => {
+      let index = d3.bisector((dataPoint: [number, number]) => dataPoint[0]).right(data, time);
+      index = Math.max(index - 1, 0);
+      const damage = data[index][1];
+      this._damagesAtSelector!.damgages.push({ name: this._playerNamesById.get(playerId)!, color: ColorUtils.hashStringToColor(playerId), damage })
+    });
+    this._cd.detectChanges();
   }
 
   private _onLogFinished(): void {
@@ -147,10 +174,10 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    const start: number = this._isZoomed ? this._currentZoom![0] : 0;
-    const end: number = this._isZoomed ? this._currentZoom![1] : this._latestEntry.time;
-    const min: number = this._isZoomed ? this._currentMin : 0;
-    const max: number = this._isZoomed ? this._currentMax : this._maxDamageDone;
+    const start: number = this._isFocused ? this._currentFocusBoundaries![0] : 0;
+    const end: number = this._isFocused ? this._currentFocusBoundaries![1] : this._latestEntry.time;
+    const min: number = this._isFocused ? this._currentFocusMinDamage : 0;
+    const max: number = this._isFocused ? this._currentFocusMaxDamage : this._maxDamage;
 
     const graph = d3.select(this.graphRootRef.nativeElement);
     graph.attr('width', this.width);
@@ -167,6 +194,38 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
     this._renderLeftAxis(graph, yScale);
     this._renderBottomAxis(graph, this.xScale);
     this._renderLines(graph, this.xScale, yScale);
+    this._addSelectorBehaviour(graph);
+  }
+
+  private _addSelectorBehaviour(graph: d3.Selection<any, any, any, any>) {
+    graph.
+      on('mousemove', (e: MouseEvent, a) => {
+        const selectorPos: number = Math.min(Math.max(e.offsetX, this.margin.left), this.width - this.margin.right);
+        this._selectorPosition$.next(selectorPos)
+        this._renderSelector(graph, selectorPos);
+      })
+      .on('mouseleave', () => {
+        this._selectorPosition$.next(null);
+        this._damagesAtSelector = null;
+        this._cd.detectChanges();
+        this._removeSelector(graph);
+      });
+
+  }
+
+  private _renderSelector(graph: d3.Selection<any, any, any, any>, at: number) {
+    const line = graph.selectAll('.selector-line').data([0]);
+    line.enter()
+      .append('rect')
+      .classed('selector-line', true)
+      .attr('width', 1)
+      .attr('height', this.innerHeight)
+      .merge(line as any)
+      .attr('transform', `translate(${at}, ${this.margin.top})`)
+  }
+
+  private _removeSelector(graph: d3.Selection<any, any, any, any>) {
+    graph.selectAll('.selector-line').data([]).exit().remove();
   }
 
   private _renderLeftAxis(graph: d3.Selection<any, any, any, any>, yScale: d3.ScaleLinear<any, any, any>): void {
@@ -193,7 +252,7 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
   }
 
   private _renderLines(graph: d3.Selection<any, any, any, any>, xScale: d3.ScaleTime<any, any>, yScale: d3.ScaleLinear<any, any, any>): void {
-    const dataset = this._isZoomed ? this._currentZoomedData : this._data;
+    const dataset = this._isFocused ? this._currentDataInFocus : this._data;
     dataset.forEach((_data: [number, number][], playerId: string) => {
       const groupSelection = graph.selectAll(`.line-group-${playerId}`).data([0]);
       groupSelection.enter()
@@ -202,6 +261,7 @@ export class DamageLinesComponent implements AfterViewInit, OnDestroy {
         .attr('transform', `translate(${this.margin.left}, ${this.margin.top})`);
 
       const line = d3.line()
+        .curve(d3.curveStepBefore)
         .x((d: [number, number]) => xScale(d[0]))
         .y((d: [number, number]) => yScale(d[1]));
 
