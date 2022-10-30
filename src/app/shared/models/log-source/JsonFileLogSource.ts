@@ -1,10 +1,11 @@
-import { concatMap, delay, Observable, of, ReplaySubject } from "rxjs";
+import { Observable, ReplaySubject } from "rxjs";
 import { LogEntry } from "../log-entry/LogEntry";
 import { LogEntryFactory } from "../log-entry/LogEntryFactory";
 import { LogSource } from "./LogSource";
 
 export class JsonFileLogSource implements LogSource {
     private _source: any;
+    private _name: string;
     private _logStream: ReplaySubject<LogEntry> = new ReplaySubject();
     private _modVersion: string;
     private _logVersion: string;
@@ -28,6 +29,10 @@ export class JsonFileLogSource implements LogSource {
         return this._startDate;
     }
 
+    get name(): string{
+        return this._name;
+    }
+
     private get _logAvailable(): boolean {
         return !!this._source['log']?.length;
     }
@@ -35,12 +40,12 @@ export class JsonFileLogSource implements LogSource {
         return this._numEntriesParsed === this._source['log'].length;
     }
 
-    constructor(fileContent: string) {
+    constructor(fileContent: string, name: string) {
         this._source = JSON.parse(fileContent);
         this._logVersion = this._source['logVersion'];
         this._modVersion = this._source['modVersion'];
         this._startDate = this._source['timestamp'];
-
+        this._name = name;
         this._parseLog();
     }
 

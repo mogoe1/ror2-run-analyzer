@@ -9,15 +9,19 @@ import { LogSource } from 'src/app/shared/models/log-source/LogSource';
   styleUrls: ['./analyze-page.component.scss']
 })
 export class AnalyzePageComponent {
-  private _logSource?: LogSource;
+  private _logSources: LogSource[] = [];
 
-  public get logSource(): LogSource | undefined {
-    return this._logSource;
+  public get logSources(): LogSource[] {
+    return this._logSources;
   }
 
   public async onFileSelected(event: NgxDropzoneChangeEvent) {
-    const content: string = await event.addedFiles[0].text();
-    this._logSource = new JsonFileLogSource(content);
+
+    for (let file of event.addedFiles) {
+      const content: string = await file.text();
+      const name: string = file.name;
+      this._logSources.push(new JsonFileLogSource(content, name));
+    }
   }
 
 }

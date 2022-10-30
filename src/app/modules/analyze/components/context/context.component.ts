@@ -8,7 +8,7 @@ import { PlayerStatsUpdateEntry } from 'src/app/shared/models/log-entry/PlayerSt
 import { StageEndEntry } from 'src/app/shared/models/log-entry/StageEndEntry';
 import { LogSource } from 'src/app/shared/models/log-source/LogSource';
 import { ColorUtils } from 'src/app/shared/utils/ColorUtils';
-import { ZoomService } from '../../services/zoom.service';
+import { FocusService } from '../../services/focus.service';
 
 @Component({
   selector: 'app-context',
@@ -43,7 +43,7 @@ export class ContextComponent implements AfterViewInit, OnDestroy {
     return this._height - this.margin.top - this.margin.bottom;
   }
 
-  constructor(private _zoomService: ZoomService) { }
+  constructor(private _zoomService: FocusService) { }
 
   ngAfterViewInit(): void {
     this.logSource.logStream$.pipe(
@@ -52,7 +52,7 @@ export class ContextComponent implements AfterViewInit, OnDestroy {
       finalize(() => this._onLogFinished())
     ).subscribe();
 
-    this._zoomService.zoom$.pipe(
+    this._zoomService.focus$.pipe(
       takeUntil(this._destroyed$),
       filter(() => !this._brushInProgress),
       tap((zoom: [number, number] | null) => this._onZoomed(zoom)),
@@ -137,7 +137,7 @@ export class ContextComponent implements AfterViewInit, OnDestroy {
       .on('start', () => { this._brushInProgress = true })
       .on('end.cleared',(event: d3.D3BrushEvent<any>, b: any)=>{
         if(!event.selection){
-          this._zoomService.setZoom(null);
+          this._zoomService.setFocus(null);
         }
       })
       .on('end', () =>this._brushInProgress = false)
@@ -145,9 +145,9 @@ export class ContextComponent implements AfterViewInit, OnDestroy {
         if (event.selection) {
           const start: number = xScale.invert(event?.selection?.[0] as unknown as number - 10).getTime() / this.FACTOR;
           const end: number = xScale.invert(event?.selection?.[1] as unknown as number - 10).getTime() / this.FACTOR;
-          this._zoomService.setZoom([start, end]);
+          this._zoomService.setFocus([start, end]);
         } else {
-          this._zoomService.setZoom(null);
+          this._zoomService.setFocus(null);
         }
       });
 

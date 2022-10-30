@@ -9,6 +9,8 @@ import { DamageLinesComponent } from './components/damage-lines/damage-lines.com
 import { HighestDamageLinesComponent } from './components/max-damage-lines/highest-damage-lines.component';
 import { HealthLinesComponent } from './components/health-lines/health-lines.component';
 import { ContextComponent } from './components/context/context.component';
+import { RunInstanceComponent } from './components/run-instance/run-instance.component';
+import { SharedModule } from 'src/app/shared/shared.module';
 
 
 @NgModule({
@@ -18,12 +20,14 @@ import { ContextComponent } from './components/context/context.component';
     DamageLinesComponent,
     HighestDamageLinesComponent,
     HealthLinesComponent,
-    ContextComponent
+    ContextComponent,
+    RunInstanceComponent
   ],
   imports: [
     CommonModule,
     AnalyzeRoutingModule,
     NgxDropzoneModule,
+    SharedModule,
   ]
 })
 export class AnalyzeModule { }

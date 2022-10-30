@@ -1,7 +1,33 @@
-<svg #graph width="500" height="200"></svg>
-<div *ngIf="selectorValues">
+<svg #graph>
+    <defs>
+        <clipPath id="clip1">
+            <rect [attr.width]="innerWidth" [attr.height]="innerHeight"></rect>
+        </clipPath>
+    </defs>
+    <g appD3LeftLinearAxisDirective [scale]="yScale" [attr.transform]="yAxisTransform"
+        [renderObservable]="renderObservable">
+    </g>
+    <g appD3BottomTimeAxis [scale]="xScale" [attr.transform]="xAxisTransform" [renderObservable]="renderObservable">
+    </g>
+    <g style="clip-path:url(#clip1);" [attr.transform]="innerContentTransform">
+        <g class="x" *ngFor="let playerId of playerIds">
+            <path appD3LinePath [xScale]="xScale" [yScale]="yScale" [color]="playerInfoService.getPlayerInfoById(playerId)?.color ?? 'red'"
+                [renderObservable]="renderObservable" [data]="getDataForPlayer(playerId)"></path>
+        </g>
+        <g appD3VerticalMouseMarker [xScale]="xScale" [yScale]="yScale" (cursorPosition)="onCursorPositionChanged($event)" [attr.width]="innerWidth"
+        [attr.height]="innerHeight"></g>
+    </g>
+</svg>
+<div>
+    <div>Damages at: <span *ngIf="currentSelectorPos !== null">{{currentSelectorPos| date:'H:mm:ss':'UTC+0':'en-US'}}</span></div>
+    <div *ngFor="let playerId of playerIds">
+        <span [style.color]="playerInfoService.getPlayerInfoById(playerId)?.color">{{playerInfoService.getPlayerInfoById(playerId)?.name}}</span>:
+        <span *ngIf="currentSelectorPos !== null">{{getPlayerDamageAtSelectorPos(playerId)}}</span>
+    </div>
+</div>
+<!-- <div *ngIf="selectorValues">
     Damage at: {{selectorValues.time * 1000 | date:'H:mm:ss':'UTC+0':'en-US'}}
     <div *ngFor="let value of selectorValues.damgages">
         <span [style.color]="value.color">{{value.name}}: {{value.damage}}</span>
     </div>
-</div>
+</div> -->
